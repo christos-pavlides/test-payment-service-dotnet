@@ -7,3 +7,4 @@ public class Contact
     public Address Address { get; set; }
     public BankAccount Account { get; set; }
 }
+
