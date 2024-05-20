@@ -1,4 +1,5 @@
 using FluentValidation;
+using PaymentService.Models;
 
 namespace PaymentService;
 

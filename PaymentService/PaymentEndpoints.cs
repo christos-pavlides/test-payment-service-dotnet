@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using PaymentService.Data;
+using PaymentService.Models;
 
 namespace PaymentService;
 
@@ -11,7 +13,7 @@ public static class PaymentEndpoints
         app.MapGet("/payment", GetPayments);
     }
     
-    static async Task<IResult> CreatePayment(Validated<Payment> req, PaymentDb db)
+    static async Task<IResult> CreatePayment(Validated<Payment> req, ApiDbContext db)
     {
         var (isValid, value) = req;
         
@@ -21,7 +23,7 @@ public static class PaymentEndpoints
         return TypedResults.Created($"/payment/{value.Id}", value);
     }
 
-    static async Task<IResult> GetPayments(PaymentDb db)
+    static async Task<IResult> GetPayments(ApiDbContext db)
     {
         return TypedResults.Ok(
             await db.Payments

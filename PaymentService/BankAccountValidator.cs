@@ -1,4 +1,6 @@
 using FluentValidation;
+using PaymentService.Models;
+
 namespace PaymentService;
 
 public class BankAccountValidator : AbstractValidator<BankAccount>

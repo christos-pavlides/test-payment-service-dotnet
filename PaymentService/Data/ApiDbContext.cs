@@ -1,13 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using PaymentService.Models;
 
-namespace PaymentService;
+namespace PaymentService.Data;
 
-public class PaymentDb : DbContext
+public class ApiDbContext : DbContext
 {
-    public PaymentDb(DbContextOptions<PaymentDb> options)
+    public ApiDbContext(DbContextOptions<ApiDbContext> options)
         : base(options) { }
 
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Contact> Contacts => Set<Contact>();
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,6 +20,9 @@ public class PaymentDb : DbContext
 
         modelBuilder.Entity<Payment>()
             .HasOne(p => p.Originator);
+        
+        modelBuilder.Entity<Contact>()
+            .HasOne(c => c.Address);
 
     }
 }

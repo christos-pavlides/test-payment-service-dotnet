@@ -1,4 +1,4 @@
-namespace PaymentService;
+namespace PaymentService.Models;
 
 public enum ChargesBearer
 {

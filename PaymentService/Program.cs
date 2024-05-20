@@ -1,14 +1,15 @@
-using System.Reflection;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using PaymentService;
 using FluentValidation;
-using FluentValidation.Results;
-using static Microsoft.AspNetCore.Http.Results;
+using PaymentService.Data;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<ContactDb>(opt => opt.UseInMemoryDatabase("ContactList"));
-builder.Services.AddDbContext<PaymentDb>(opt => opt.UseInMemoryDatabase("PaymentList"));
+
+var conn = builder.Configuration.GetConnectionString("DefaultConnection");
+
+builder.Services.AddDbContext<ApiDbContext>(opt => opt.UseNpgsql(conn));
+
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve);

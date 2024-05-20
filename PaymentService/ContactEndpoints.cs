@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PaymentService.Data;
+using PaymentService.Models;
 
 namespace PaymentService;
 
@@ -13,7 +15,7 @@ public static class ContactEndpoints
 
     }
     
-    static async Task<IResult> CreateContact(Validated<Contact> req, ContactDb db)
+    static async Task<IResult> CreateContact(Validated<Contact> req, ApiDbContext db)
     {
         var (isValid, value) = req;
 
@@ -27,7 +29,7 @@ public static class ContactEndpoints
         return TypedResults.Created($"/contact/{value.Id}", value);
     }
 
-    static async Task<IResult> GetContacts(ContactDb db)
+    static async Task<IResult> GetContacts(ApiDbContext db)
     {
         return TypedResults.Ok(await db.Contacts.Include(c => c.Address).ToListAsync());
     }
