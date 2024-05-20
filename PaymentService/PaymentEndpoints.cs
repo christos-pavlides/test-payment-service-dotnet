@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using PaymentService.Data;
 using PaymentService.Models;
+using Serilog;
 
 namespace PaymentService;
 
@@ -25,13 +25,26 @@ public static class PaymentEndpoints
 
     static async Task<IResult> GetPayments(ApiDbContext db)
     {
-        return TypedResults.Ok(
-            await db.Payments
-                .Include(p => p.Beneficiary.Address)
-                .Include(p => p.Beneficiary.Account)
-                .Include(p => p.Originator.Address)
-                .Include(p => p.Originator.Account)
-                .ToListAsync()
-        );
+        try
+        {
+            return TypedResults.Ok(
+                await db.Payments
+                    .Include(p => p.Beneficiary.Address)
+                    .Include(p => p.Beneficiary.Account)
+                    .Include(p => p.Originator.Address)
+                    .Include(p => p.Originator.Account)
+                    .ToListAsync()
+            );
+        }
+        catch (Exception e)
+        {
+            Log.Fatal(e, "Application terminated unexpectedly");
+            return TypedResults.BadRequest("Something went wrong with getting payments");
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
+        
     }
 }

@@ -3,26 +3,43 @@ using Microsoft.EntityFrameworkCore;
 using PaymentService;
 using FluentValidation;
 using PaymentService.Data;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
-
-var conn = builder.Configuration.GetConnectionString("DefaultConnection");
-
-builder.Services.AddDbContext<ApiDbContext>(opt => opt.UseNpgsql(conn));
-
-builder.Services.AddDatabaseDeveloperPageExceptionFilter();
-builder.Services.AddControllers().AddJsonOptions(options =>
-    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve);
-builder.Services.ConfigureHttpJsonOptions(options =>
+try
 {
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-});
-builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+    Log.Information("Starting web application");
 
-var app = builder.Build();
+    var builder = WebApplication.CreateBuilder(args);
 
-app.MapGet("/", () => "Hello World!");
+    var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 
-app.RegisterPaymentEndpoints();
-app.RegisterContactEndpoints();
-app.Run();
+    //Register Services
+    builder.Services.AddDbContext<ApiDbContext>(opt => opt.UseNpgsql(conn));
+    builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+    builder.Services.AddControllers().AddJsonOptions(options =>
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve);
+    builder.Services.ConfigureHttpJsonOptions(options =>
+    {
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+    builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+    var app = builder.Build();
+
+    //Logging
+    app.UseSerilogRequestLogging();
+    
+    // Register Endpoints
+    app.MapGet("/", () => "Hello World!");
+    app.RegisterPaymentEndpoints();
+    app.RegisterContactEndpoints();
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
