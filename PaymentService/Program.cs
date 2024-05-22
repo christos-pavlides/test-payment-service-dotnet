@@ -4,12 +4,24 @@ using PaymentService;
 using FluentValidation;
 using PaymentService.Data;
 using Serilog;
+using Serilog.Events;
 
 try
 {
     Log.Information("Starting web application");
 
     var builder = WebApplication.CreateBuilder(args);
+    
+    // // Configure Serilog
+    // Log.Logger = new LoggerConfiguration()
+    //     .MinimumLevel.Debug()
+    //     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    //     .Enrich.FromLogContext()
+    //     .WriteTo.Console()
+    //     .CreateLogger();
+    //
+    // builder.Host.UseSerilog(); // Add Serilog to the host
+    
 
     var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -27,7 +39,7 @@ try
     var app = builder.Build();
 
     //Logging
-    app.UseSerilogRequestLogging();
+    // app.UseSerilogRequestLogging();
     
     // Register Endpoints
     app.MapGet("/", () => "Hello World!");
