@@ -1,6 +1,8 @@
+using PaymentService.Contracts;
+
 namespace PaymentService;
 
-public class Address
+public class Address : ITimeStampedModel
 {
     public int Id { get; set; }
     public int ContactId { get; set; }
@@ -11,4 +13,6 @@ public class Address
     public string? City { get; set; }
     public string? PostalCode { get; set; }
     public string CountryCode { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }

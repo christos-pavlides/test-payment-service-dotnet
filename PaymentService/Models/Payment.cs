@@ -1,3 +1,5 @@
+using PaymentService.Contracts;
+
 namespace PaymentService.Models;
 
 public enum ChargesBearer
@@ -7,7 +9,7 @@ public enum ChargesBearer
      Shared
 }
 
-public class Payment
+public class Payment : ITimeStampedModel
 {
      public int Id { get; set; }
      public double Amount { get; set; }
@@ -20,4 +22,7 @@ public class Payment
      public ChargesBearer ChargesBearer { get; set; }
      public string Details { get; set; }
      public string? ReferenceNumber { get; set; }
+     
+     public DateTime CreatedAt { get; set; }
+     public DateTime UpdatedAt { get; set; }
 }

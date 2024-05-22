@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PaymentService.Contracts;
 using PaymentService.Models;
 
 namespace PaymentService.Data;
@@ -30,4 +31,43 @@ public class ApiDbContext : DbContext
         modelBuilder.Entity<BankAccount>().ToTable("BankAccounts");
 
     }
+    
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var timestamp = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<ITimeStampedModel>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = timestamp;
+                entry.Entity.UpdatedAt= timestamp;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = timestamp;
+            }
+        }
+
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var timestamp = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<ITimeStampedModel>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = timestamp;
+                entry.Entity.UpdatedAt = timestamp;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = timestamp;
+            }
+        }
+
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
 }

@@ -13,14 +13,14 @@ try
     var builder = WebApplication.CreateBuilder(args);
     
     // // Configure Serilog
-    // Log.Logger = new LoggerConfiguration()
-    //     .MinimumLevel.Debug()
-    //     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-    //     .Enrich.FromLogContext()
-    //     .WriteTo.Console()
-    //     .CreateLogger();
-    //
-    // builder.Host.UseSerilog(); // Add Serilog to the host
+    Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.Debug()
+        .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+        .Enrich.FromLogContext()
+        .WriteTo.Console()
+        .CreateLogger();
+    
+    builder.Host.UseSerilog(); // Add Serilog to the host
     
 
     var conn = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -39,7 +39,7 @@ try
     var app = builder.Build();
 
     //Logging
-    // app.UseSerilogRequestLogging();
+    app.UseSerilogRequestLogging();
     
     // Register Endpoints
     app.MapGet("/", () => "Hello World!");
