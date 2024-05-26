@@ -48,8 +48,7 @@ try
     app.UseSerilogRequestLogging();
 
     // Register Endpoints
-    app.MapGet("/", () => "Hello World!").WithName("Homepage")
-        .WithOpenApi();
+    app.MapGet("/", () => "Hello World!").ExcludeFromDescription();
     app.RegisterPaymentEndpoints();
     app.RegisterContactEndpoints();
 

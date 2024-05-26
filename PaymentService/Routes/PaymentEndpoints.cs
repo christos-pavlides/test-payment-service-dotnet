@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Primitives;
+using Microsoft.OpenApi.Any;
+using Microsoft.OpenApi.Models;
 using PaymentService.Data;
 using PaymentService.Models;
 using Serilog;
@@ -11,12 +12,72 @@ public static class PaymentEndpoints
 {
     public static void RegisterPaymentEndpoints(this WebApplication app)
     {
-        app.MapPost("/payment", CreatePayment).WithOpenApi();
-        ;
-        app.MapGet("/payment", GetPayments).WithOpenApi();
-        ;
-        app.MapGet("/payment/{id}", GetPaymentById).WithOpenApi();
-        ;
+        app.MapPost("/payment", CreatePayment).Accepts<Payment>("application/json").WithOpenApi();
+        app.MapGet("/payment", GetPayments).WithName("GetPayments").WithOpenApi(generatedOperation =>
+        {
+            var idParameter = new OpenApiParameter
+            {
+                Name = "id",
+                In = ParameterLocation.Query,
+                Description = "Filter payments by id or ids (comma delimited).",
+                Required = false,
+                Example = new OpenApiString("1,3"),
+                Schema = new OpenApiSchema { Type = "string", Format = "number" }
+            };
+            generatedOperation.Parameters.Add(idParameter);
+            
+            var fromDateParameter = new OpenApiParameter
+            {
+                Name = "from",
+                In = ParameterLocation.Query,
+                Description = "Filter payments from the specified date (inclusive).",
+                Required = false,
+                Schema = new OpenApiSchema { Type = "string", Format = "date" }
+            };
+            generatedOperation.Parameters.Add(fromDateParameter);
+
+            var toDateParameter = new OpenApiParameter
+            {
+                Name = "to",
+                In = ParameterLocation.Query,
+                Description = "Filter payments up to the specified date (inclusive).",
+                Required = false,
+                Schema = new OpenApiSchema { Type = "string", Format = "date" }
+            };
+            generatedOperation.Parameters.Add(toDateParameter);
+
+            var minAmountParameter = new OpenApiParameter
+            {
+                Name = "minAmount",
+                In = ParameterLocation.Query,
+                Description = "Filter payments with a minimum amount.",
+                Required = false,
+                Schema = new OpenApiSchema { Type = "number", Format = "decimal" }
+            };
+            generatedOperation.Parameters.Add(minAmountParameter);
+
+            var maxAmountParameter = new OpenApiParameter
+            {
+                Name = "maxAmount",
+                In = ParameterLocation.Query,
+                Description = "Filter payments with a maximum amount.",
+                Required = false,
+                Schema = new OpenApiSchema { Type = "number", Format = "decimal" }
+            };
+            generatedOperation.Parameters.Add(maxAmountParameter);
+
+            return generatedOperation;
+        });
+        app.MapGet("/payment/{id}", GetPaymentById).WithName("GetPaymentById").WithOpenApi(generatedOperation =>
+            {
+                var parameter = generatedOperation.Parameters.FirstOrDefault(p => p.Name == "id");
+
+                parameter.Description = "The id of the Payment to fetch";
+                parameter.Required = true;
+
+                return generatedOperation;
+            }).Produces<Payment>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
     }
 
     static async Task<IResult> GetPaymentById(int id, ApiDbContext db)
@@ -147,26 +208,26 @@ public static class PaymentEndpoints
                 List<string> ids = id.ToString().Split(',').ToList();
                 payments = payments.Where(p => ids.Contains(p.Id.ToString()));
             }
-            
-            if (! String.IsNullOrWhiteSpace(fromDate))
+
+            if (!String.IsNullOrWhiteSpace(fromDate))
             {
                 DateTime from = DateTime.Parse(fromDate.ToString());
                 payments = payments.Where(p => p.CreatedAt >= from);
             }
-            
-            if (! String.IsNullOrWhiteSpace(toDate))
+
+            if (!String.IsNullOrWhiteSpace(toDate))
             {
                 DateTime to = DateTime.Parse(fromDate.ToString());
                 payments = payments.Where(p => p.CreatedAt <= to);
             }
 
-            if (! String.IsNullOrWhiteSpace(minAmount))
+            if (!String.IsNullOrWhiteSpace(minAmount))
             {
                 double min = double.Parse(minAmount.ToString());
                 payments = payments.Where(p => p.Amount >= min);
             }
 
-            if (! String.IsNullOrWhiteSpace(maxAmount))
+            if (!String.IsNullOrWhiteSpace(maxAmount))
             {
                 double max = double.Parse(maxAmount.ToString());
                 payments = payments.Where(p => p.Amount <= max);
