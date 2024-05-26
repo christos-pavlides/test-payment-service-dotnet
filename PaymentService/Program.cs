@@ -6,23 +6,21 @@ using PaymentService.Data;
 using Serilog;
 using Serilog.Events;
 
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .CreateLogger();
+
 try
 {
     Log.Information("Starting web application");
 
     var builder = WebApplication.CreateBuilder(args);
     
-    // // Configure Serilog
-    Log.Logger = new LoggerConfiguration()
-        .MinimumLevel.Debug()
-        .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-        .Enrich.FromLogContext()
-        .WriteTo.Console()
-        .CreateLogger();
+    builder.Host.UseSerilog();
     
-    builder.Host.UseSerilog(); // Add Serilog to the host
-    
-
     var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 
     //Register Services
@@ -36,15 +34,25 @@ try
     });
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen();
+
     var app = builder.Build();
 
-    //Logging
-    app.UseSerilogRequestLogging();
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
     
+    app.UseSerilogRequestLogging();
+
     // Register Endpoints
-    app.MapGet("/", () => "Hello World!");
+    app.MapGet("/", () => "Hello World!").WithName("Homepage")
+        .WithOpenApi();
     app.RegisterPaymentEndpoints();
     app.RegisterContactEndpoints();
+
     app.Run();
 }
 catch (Exception ex)

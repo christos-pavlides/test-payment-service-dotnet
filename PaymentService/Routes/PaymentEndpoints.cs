@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Primitives;
 using PaymentService.Data;
 using PaymentService.Models;
 using Serilog;
@@ -10,9 +11,12 @@ public static class PaymentEndpoints
 {
     public static void RegisterPaymentEndpoints(this WebApplication app)
     {
-        app.MapPost("/payment", CreatePayment);
-        app.MapGet("/payment", GetPayments);
-        app.MapGet("/payment/{id}", GetPaymentById);
+        app.MapPost("/payment", CreatePayment).WithOpenApi();
+        ;
+        app.MapGet("/payment", GetPayments).WithOpenApi();
+        ;
+        app.MapGet("/payment/{id}", GetPaymentById).WithOpenApi();
+        ;
     }
 
     static async Task<IResult> GetPaymentById(int id, ApiDbContext db)
@@ -20,23 +24,23 @@ public static class PaymentEndpoints
         return await db.Payments.FindAsync(id)
             is Payment payment
             ? TypedResults.Ok(payment)
-            : (IResult) TypedResults.NotFound();
+            : (IResult)TypedResults.NotFound();
     }
-    
+
     static async Task<IResult> CreatePayment(Validated<Payment> req, ApiDbContext db)
     {
         //add protection regarding duplicate requests
         //throttling?
         var (isValid, value) = req;
-        
+
         if (!isValid) return TypedResults.BadRequest(req.Errors);
 
         var transaction = db.Database.BeginTransaction();
-        
+
         try
         {
             Contact beneficiary = await db.Contacts.Include("Address")
-                .Include("Account").FirstOrDefaultAsync( c => c.Name == value.Beneficiary.Name);
+                .Include("Account").FirstOrDefaultAsync(c => c.Name == value.Beneficiary.Name);
 
             if (beneficiary == null)
             {
@@ -70,13 +74,12 @@ public static class PaymentEndpoints
                 address.City = value.Beneficiary.Address.City;
                 address.PostalCode = value.Beneficiary.Address.PostalCode;
                 address.CountryCode = value.Beneficiary.Address.CountryCode;
-                
             }
 
             value.Beneficiary = beneficiary;
-            
+
             Contact originator = await db.Contacts.Include("Address")
-                .Include("Account").FirstOrDefaultAsync( c => c.Name == value.Originator.Name);
+                .Include("Account").FirstOrDefaultAsync(c => c.Name == value.Originator.Name);
 
             if (originator == null)
             {
@@ -110,14 +113,13 @@ public static class PaymentEndpoints
                 address.City = value.Originator.Address.City;
                 address.PostalCode = value.Originator.Address.PostalCode;
                 address.CountryCode = value.Originator.Address.CountryCode;
-                
             }
 
             value.Originator = originator;
-            
+
             db.Add(value);
             await db.SaveChangesAsync();
-            
+
             transaction.Commit();
             return TypedResults.Created($"/payment/{value.Id}", value);
         }
@@ -128,12 +130,50 @@ public static class PaymentEndpoints
         }
     }
 
-    static async Task<IResult> GetPayments(ApiDbContext db)
+    static async Task<IResult> GetPayments(HttpRequest request, ApiDbContext db)
     {
+        StringValues id = request.Query["id"];
+        StringValues fromDate = request.Query["from"];
+        StringValues toDate = request.Query["to"];
+        StringValues minAmount = request.Query["minAmount"];
+        StringValues maxAmount = request.Query["maxAmount"];
+
         try
         {
+            IQueryable<Payment> payments = db.Payments;
+
+            if (id.Count > 0)
+            {
+                List<string> ids = id.ToString().Split(',').ToList();
+                payments = payments.Where(p => ids.Contains(p.Id.ToString()));
+            }
+            
+            if (! String.IsNullOrWhiteSpace(fromDate))
+            {
+                DateTime from = DateTime.Parse(fromDate.ToString());
+                payments = payments.Where(p => p.CreatedAt >= from);
+            }
+            
+            if (! String.IsNullOrWhiteSpace(toDate))
+            {
+                DateTime to = DateTime.Parse(fromDate.ToString());
+                payments = payments.Where(p => p.CreatedAt <= to);
+            }
+
+            if (! String.IsNullOrWhiteSpace(minAmount))
+            {
+                double min = double.Parse(minAmount.ToString());
+                payments = payments.Where(p => p.Amount >= min);
+            }
+
+            if (! String.IsNullOrWhiteSpace(maxAmount))
+            {
+                double max = double.Parse(maxAmount.ToString());
+                payments = payments.Where(p => p.Amount <= max);
+            }
+
             return TypedResults.Ok(
-                await db.Payments
+                await payments
                     .Include(p => p.Beneficiary.Address)
                     .Include(p => p.Beneficiary.Account)
                     .Include(p => p.Originator.Address)
@@ -143,7 +183,7 @@ public static class PaymentEndpoints
         }
         catch (Exception e)
         {
-            Log.Fatal(e, "Application terminated unexpectedly");
+            Log.Fatal(e, "Something went wrong with getting payments");
             return TypedResults.BadRequest("Something went wrong with getting payments");
         }
     }

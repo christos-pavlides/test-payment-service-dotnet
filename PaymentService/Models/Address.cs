@@ -5,7 +5,9 @@ namespace PaymentService;
 public class Address : ITimeStampedModel
 {
     public int Id { get; set; }
+
     public int ContactId { get; set; }
+
     // public Contact Contact { get; set; }
     public string AddressLine1 { get; set; }
     public string? AddressLine2 { get; set; }
