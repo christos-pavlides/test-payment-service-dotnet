@@ -28,11 +28,9 @@ public class Validated<T>
         isValid = IsValid;
         value = Value;
     }
-
-    // ReSharper disable once UnusedMember.Global
+    
     public static async ValueTask<Validated<T>> BindAsync(HttpContext context, ParameterInfo parameter)
     {
-        // only JSON is supported right now, no complex model binding
         var value = await context.Request.ReadFromJsonAsync<T>();
         var validator = context.RequestServices.GetRequiredService<IValidator<T>>();
 

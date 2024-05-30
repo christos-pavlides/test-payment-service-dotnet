@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using PaymentService;
 using FluentValidation;
+using PaymentService.Contracts;
 using PaymentService.Data;
+using PaymentService.Repositories;
 using Serilog;
 using Serilog.Events;
 
@@ -33,7 +35,8 @@ try
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
     builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-
+    builder.Services.AddScoped<IContactRepository, ContactRepository>();
+    builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
 

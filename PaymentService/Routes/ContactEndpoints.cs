@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PaymentService.Contracts;
 using PaymentService.Data;
 using PaymentService.Models;
 
@@ -15,7 +16,7 @@ public static class ContactEndpoints
 
     }
     
-    static async Task<IResult> CreateContact(Validated<Contact> req, ApiDbContext db)
+    static async Task<IResult> CreateContact(Validated<Contact> req, IContactRepository contactRepo, ApiDbContext db)
     {
         var (isValid, value) = req;
 
@@ -23,9 +24,10 @@ public static class ContactEndpoints
         {
             return TypedResults.BadRequest(new ProblemDetails {Title = "Validation Failed"});
         }
-        
-        db.Add(value);
+
+        await contactRepo.AddContactAsync(value);
         await db.SaveChangesAsync();
+        
         return TypedResults.Created($"/contact/{value.Id}", value);
     }
 

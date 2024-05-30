@@ -1,45 +1,29 @@
-using System.Text;
-using FluentValidation;
-using FluentValidation.Results;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.DependencyInjection;
 using PaymentService.Models;
+using PaymentService.Repositories;
 using PaymentService.Tests.Helpers;
 
 namespace PaymentService.Tests;
 
 public class PaymentInMemoryTests
 {
-    [Fact]
-    public async Task GetPaymentRetrunsNotFoundIfNotExists()
+    private static List<Contact> FakeContacts()
     {
-        await using var context = new MockDb().CreateDbContext();
-        
-        var result = await PaymentEndpoints.GetPaymentById(1, context);
-        
-        Assert.IsType<NotFound>(result);
-    }
-
-    [Fact]
-    public async Task CreatePayment()
-    {
-        await using var context = new MockDb().CreateDbContext();
-        
-        Payment newPayment = new Payment
+        return new List<Contact>()
         {
-            Amount = 388.50,
-            PaymentCurrency = "EUR",
-            Originator = new Contact
+            new Contact
             {
-                Name = "Test Testone",
+                Name = "Test One",
                 Address = new Address
                 {
-                    AddressLine1 = "Markou Drakou",
+                    AddressLine1 = "Test One Str",
                     AddressLine2 = "3",
-                    AddressLine3 = "karanikki",
+                    AddressLine3 = "line 3",
                     City = null,
-                    PostalCode = "5320",
+                    PostalCode = "532032",
                     CountryCode = "CY"
                 },
                 Account = new BankAccount
@@ -48,105 +32,292 @@ public class PaymentInMemoryTests
                     Bic = "BCYO12312"
                 }
             },
-            Beneficiary = new Contact
+            new Contact
             {
-                Name = "Vladimir Putin",
+                Name = "Test Two",
                 Address = new Address
                 {
-                    AddressLine1 = "Test test",
-                    AddressLine2 = "12312asdasd",
-                    AddressLine3 = "teasdaasdasd",
-                    City = "Larnaca",
-                    PostalCode = "123asdasd",
+                    AddressLine1 = "Test Two Str",
+                    AddressLine2 = "14",
+                    AddressLine3 = null,
+                    City = null,
+                    PostalCode = "532032",
                     CountryCode = "CY"
                 },
                 Account = new BankAccount
                 {
-                    AccountNumber = "aaaaaaaa3333333",
+                    AccountNumber = "ASD333",
                     Bic = "BCYO12312"
                 }
             },
+            new Contact
+            {
+                Name = "Test Three",
+                Address = new Address
+                {
+                    AddressLine1 = "Test Three Str",
+                    AddressLine2 = "1",
+                    AddressLine3 = null,
+                    City = null,
+                    PostalCode = "532032",
+                    CountryCode = "CY"
+                },
+                Account = new BankAccount
+                {
+                    AccountNumber = "ASD44444",
+                    Bic = "BCYO12312"
+                }
+            }
+        };
+    }
+
+    private static HttpContext CreateMockHttpContext() =>
+        new DefaultHttpContext
+        {
+            RequestServices = new ServiceCollection().AddLogging().BuildServiceProvider(),
+            Response =
+            {
+                Body = new MemoryStream(),
+            },
+        };
+
+    [Fact]
+    public async Task GetPaymentRetrunsNotFoundIfNotExists()
+    {
+        await using var context = new MockDb().CreateDbContext();
+        var paymentRepoMock = new PaymentRepository(context);
+
+        var result = await PaymentEndpoints.GetPaymentById(1, paymentRepoMock);
+
+        Assert.IsType<NotFound>(result);
+    }
+
+    [Fact]
+    public async Task CreatePaymentStoresValidPayment()
+    {
+        await using var context = new MockDb().CreateDbContext();
+        var contactRepoMock = new ContactRepository(context);
+        var paymentRepoMock = new PaymentRepository(context);
+        var mockHttpContext = CreateMockHttpContext();
+
+        var originator = FakeContacts().Find(c => c.Name == "Test One");
+        var beneficiary = FakeContacts().Find(c => c.Name == "Test Two");
+
+        Payment newPayment = new Payment
+        {
+            Amount = 388.50,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
             ChargesBearer = ChargesBearer.Beneficiary,
             Details = "This is a necessary payment"
         };
 
-        
-        
-        //todo: fix chargesBearer enum
-        var paymentJson = @"
-{
-    ""amount"": 388.50,
-    ""paymentCurrency"": ""EUR"",
-    ""originator"": {
-        ""name"": ""Con Kakouyshiasio"",
-        ""address"": {
-            ""addressLine1"": ""Markou Drakou"",
-            ""addressLine2"": ""3"",
-            ""addressLine3"": ""karanikki"",
-            ""city"": null,
-            ""postalCode"": null,
-            ""countryCode"": ""CY""
-        },
-        ""account"": {
-            ""accountNumber"": ""ASD123123"",
-            ""bic"": ""BCYO12312""
-        }
-    },
-    ""beneficiary"": {
-        ""name"": ""Vladimir Putin"",
-        ""address"": {
-            ""addressLine1"": ""Test test"",
-            ""addressLine2"": ""12312asdasd"",
-            ""addressLine3"": ""teasdaasdasd"",
-            ""city"": ""Larnaca"",
-            ""postalCode"": ""123asdasd"",
-            ""countryCode"": ""CY""
-        },
-        ""account"": {
-            ""accountNumber"": ""aaaaaaaa3333333"",
-            ""bic"": ""BCYO12312""
-        }
-    },
-    ""chargesBearer"": 1,
-    ""details"": ""This is a necessary payment""
-}";
-        
-        // var validatedPayment = await GenerateValidatedObject(paymentJson);
         var validatedPayment = await GenerateValidatedObjectFromObject(newPayment);
-        
-        
-        var result = await PaymentEndpoints.CreatePayment(validatedPayment, context);
 
-        Assert.IsType<Created<Payment>>(result);
+        var createResult =
+            await PaymentEndpoints.CreatePayment(validatedPayment, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult);
+
+        await createResult.ExecuteAsync(mockHttpContext);
+
+        mockHttpContext.Response.Body.Position = 0;
+
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var responsePayment =
+            await JsonSerializer.DeserializeAsync<Payment>(mockHttpContext.Response.Body, jsonOptions);
+        var getResult = await PaymentEndpoints.GetPaymentById(responsePayment.Id, paymentRepoMock);
+        Assert.IsType<Ok<Payment>>(getResult);
+        Assert.Equal(newPayment.Amount, responsePayment.Amount);
+        Assert.Equal(newPayment.Beneficiary.Name, responsePayment.Beneficiary.Name);
+        Assert.Equal(newPayment.Originator.Name, responsePayment.Originator.Name);
+        Assert.Equal(newPayment.PaymentCurrency, responsePayment.PaymentCurrency);
     }
 
-    private async Task<Validated<Payment>> GenerateValidatedObject(string jsonPayment)
+    [Fact]
+    public async Task CreatePaymentDoesNotStoreInvalidPayment()
     {
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(jsonPayment));
-        
-        var httpContext = new DefaultHttpContext();
-        httpContext.Request.Body = stream;
-        httpContext.Request.ContentType = "application/json";
-        
-        var validationResult = new ValidationResult();
-        var services = new ServiceCollection();
-        services.AddSingleton<IValidator<Payment>>(new PaymentValidator());
-        var serviceProvider = services.BuildServiceProvider();
-        httpContext.RequestServices = serviceProvider;
+        await using var context = new MockDb().CreateDbContext();
+        var contactRepoMock = new ContactRepository(context);
+        var paymentRepoMock = new PaymentRepository(context);
 
-        var parameterInfo = typeof(PaymentEndpoints).GetMethod("CreatePayment").GetParameters()[0];
-        
-        // todo: fails because of JSON serializer enum option
-        var validatedPayment = await Validated<Payment>.BindAsync(httpContext, parameterInfo);
-        
-        return validatedPayment;
+        var originator = FakeContacts().Find(c => c.Name == "Test One");
+        var beneficiary = FakeContacts().Find(c => c.Name == "Test Two");
+
+        var newPayment = new Payment
+        {
+            Amount = 390.00,
+            //empty currency - payment invalid
+            PaymentCurrency = "",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        var validatedPayment = await GenerateValidatedObjectFromObject(newPayment);
+
+        var createResult =
+            await PaymentEndpoints.CreatePayment(validatedPayment, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<BadRequest<IDictionary<string, string[]>>>(createResult);
     }
 
+    [Fact]
+    public async Task GetAllCreatedPayments()
+    {
+        await using var context = new MockDb().CreateDbContext();
+        var contactRepoMock = new ContactRepository(context);
+        var paymentRepoMock = new PaymentRepository(context);
+        var mockHttpContext = CreateMockHttpContext();
+
+        var originator = FakeContacts().Find(c => c.Name == "Test One");
+        var beneficiary = FakeContacts().Find(c => c.Name == "Test Two");
+
+        Payment newPayment = new Payment
+        {
+            Amount = 388.50,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        Payment newPayment2 = new Payment
+        {
+            Amount = 400.00,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        Payment newPayment3 = new Payment
+        {
+            Amount = 260.33,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        //Create the 3 payments
+        var validatedPayment = await GenerateValidatedObjectFromObject(newPayment);
+        var createResult =
+            await PaymentEndpoints.CreatePayment(validatedPayment, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult);
+
+        var validatedPayment2 = await GenerateValidatedObjectFromObject(newPayment2);
+        var createResult2 =
+            await PaymentEndpoints.CreatePayment(validatedPayment2, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult2);
+
+        var validatedPayment3 = await GenerateValidatedObjectFromObject(newPayment3);
+        var createResult3 =
+            await PaymentEndpoints.CreatePayment(validatedPayment3, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult3);
+        
+        //Get All payments
+        var getResult = await PaymentEndpoints.GetPayments(mockHttpContext.Request, paymentRepoMock);
+
+        await getResult.ExecuteAsync(mockHttpContext);
+        mockHttpContext.Response.Body.Position = 0;
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var responsePayments =
+            await JsonSerializer.DeserializeAsync<List<Payment>>(mockHttpContext.Response.Body, jsonOptions);
+
+        Assert.NotNull(responsePayments);
+        Assert.Equal(3, responsePayments.Count);
+    }
+    
+    [Fact]
+    public async Task GetAllCreatedPaymentsFiltered()
+    {
+        await using var context = new MockDb().CreateDbContext();
+        var contactRepoMock = new ContactRepository(context);
+        var paymentRepoMock = new PaymentRepository(context);
+        var mockHttpContext = CreateMockHttpContext();
+
+        var originator = FakeContacts().Find(c => c.Name == "Test One");
+        var beneficiary = FakeContacts().Find(c => c.Name == "Test Two");
+
+        Payment newPayment = new Payment
+        {
+            Amount = 388.50,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        Payment newPayment2 = new Payment
+        {
+            Amount = 400.00,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        Payment newPayment3 = new Payment
+        {
+            Amount = 260.33,
+            PaymentCurrency = "EUR",
+            Originator = originator,
+            Beneficiary = beneficiary,
+            ChargesBearer = ChargesBearer.Beneficiary,
+            Details = "This is a necessary payment"
+        };
+
+        //Create the 3 payments
+        var validatedPayment = await GenerateValidatedObjectFromObject(newPayment);
+        var createResult =
+            await PaymentEndpoints.CreatePayment(validatedPayment, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult);
+
+        var validatedPayment2 = await GenerateValidatedObjectFromObject(newPayment2);
+        var createResult2 =
+            await PaymentEndpoints.CreatePayment(validatedPayment2, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult2);
+
+        var validatedPayment3 = await GenerateValidatedObjectFromObject(newPayment3);
+        var createResult3 =
+            await PaymentEndpoints.CreatePayment(validatedPayment3, contactRepoMock, paymentRepoMock, context);
+
+        Assert.IsType<Created<Payment>>(createResult3);
+        
+        //Get filtered payments by amount
+        mockHttpContext.Request.QueryString = new QueryString(
+            "?maxAmount=390.00");
+        var getResult = await PaymentEndpoints.GetPayments(mockHttpContext.Request, paymentRepoMock);
+
+        await getResult.ExecuteAsync(mockHttpContext);
+        mockHttpContext.Response.Body.Position = 0;
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var responsePayments =
+            await JsonSerializer.DeserializeAsync<List<Payment>>(mockHttpContext.Response.Body, jsonOptions);
+
+        Assert.NotNull(responsePayments);
+        Assert.Equal(2, responsePayments.Count);
+    }
+
+    
     private async Task<Validated<Payment>> GenerateValidatedObjectFromObject(Payment payment)
     {
         var value = payment;
         var validator = new PaymentValidator();
-        
+
         var results = await validator.ValidateAsync(value);
 
         return new Validated<Payment>(value, results);

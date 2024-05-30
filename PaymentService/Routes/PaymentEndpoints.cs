@@ -2,8 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
+using PaymentService.Contracts;
 using PaymentService.Data;
 using PaymentService.Models;
+using PaymentService.Repositories;
 using Serilog;
 
 namespace PaymentService;
@@ -75,6 +77,7 @@ public static class PaymentEndpoints
 
             return generatedOperation;
         }).Produces<List<Payment>>(StatusCodes.Status200OK).Produces(StatusCodes.Status404NotFound);
+
         app.MapGet("/payment/{id}", GetPaymentById).WithName("GetPaymentById").WithOpenApi(generatedOperation =>
             {
                 var parameter = generatedOperation.Parameters.FirstOrDefault(p => p.Name == "id");
@@ -88,28 +91,27 @@ public static class PaymentEndpoints
             .Produces(StatusCodes.Status500InternalServerError);
     }
 
-    public static async Task<IResult> GetPaymentById(int id, ApiDbContext db)
+    public static async Task<IResult> GetPaymentById(int id, IPaymentRepository paymentRepo)
     {
-        return await db.Payments.FindAsync(id)
-            is Payment payment
+        return await paymentRepo.GetPaymentByIdAsync(id) is Payment payment
             ? TypedResults.Ok(payment)
             : (IResult)TypedResults.NotFound();
     }
 
-    public static async Task<IResult> CreatePayment(Validated<Payment> req, ApiDbContext db)
+    public static async Task<IResult> CreatePayment(Validated<Payment> req, IContactRepository contactRepo,
+        IPaymentRepository paymentRepo, ApiDbContext db)
     {
         var (isValid, value) = req;
 
         if (!isValid) return TypedResults.BadRequest(req.Errors);
 
-        using var transaction = db.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory" 
-            ? db.Database.BeginTransaction() 
+        using var transaction = db.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory"
+            ? db.Database.BeginTransaction()
             : null;
 
         try
         {
-            Contact beneficiary = await db.Contacts.Include("Address")
-                .Include("Account").FirstOrDefaultAsync(c => c.Name == value.Beneficiary.Name);
+            Contact? beneficiary = await contactRepo.GetContactByNameAsync(value.Beneficiary.Name);
 
             if (beneficiary == null)
             {
@@ -132,7 +134,7 @@ public static class PaymentEndpoints
                     }
                 };
 
-                db.Contacts.Add(beneficiary);
+                await contactRepo.AddContactAsync(beneficiary);
             }
             else
             {
@@ -147,9 +149,8 @@ public static class PaymentEndpoints
 
             value.Beneficiary = beneficiary;
 
-            Contact originator = await db.Contacts.Include("Address")
-                .Include("Account").FirstOrDefaultAsync(c => c.Name == value.Originator.Name);
-
+            Contact? originator = await contactRepo.GetContactByNameAsync(value.Originator.Name);
+            
             if (originator == null)
             {
                 originator = new Contact
@@ -171,7 +172,7 @@ public static class PaymentEndpoints
                     }
                 };
 
-                db.Contacts.Add(originator);
+                await contactRepo.AddContactAsync(originator);
             }
             else
             {
@@ -186,10 +187,11 @@ public static class PaymentEndpoints
 
             value.Originator = originator;
 
-            db.Add(value);
+            await paymentRepo.AddPaymentAsync(value);
             await db.SaveChangesAsync();
 
             transaction?.Commit();
+            
             return TypedResults.Created($"/payment/{value.Id}", value);
         }
         catch (Exception e)
@@ -200,56 +202,24 @@ public static class PaymentEndpoints
         }
     }
 
-    public static async Task<IResult> GetPayments(HttpRequest request, ApiDbContext db)
+    public static async Task<IResult> GetPayments(HttpRequest request, IPaymentRepository paymentRepository)
     {
-        StringValues id = request.Query["id"];
-        StringValues fromDate = request.Query["from"];
-        StringValues toDate = request.Query["to"];
-        StringValues minAmount = request.Query["minAmount"];
-        StringValues maxAmount = request.Query["maxAmount"];
+        StringValues idValues = request.Query["id"];
+        StringValues fromDateValue = request.Query["from"];
+        StringValues toDateValue = request.Query["to"];
+        StringValues minAmountValue = request.Query["minAmount"];
+        StringValues maxAmountValue = request.Query["maxAmount"];
+
+        IEnumerable<int> ids = idValues.Count > 0 ? idValues.ToString().Split(',').Select(int.Parse) : null;
+        DateTime? fromDate = DateTime.TryParse(fromDateValue, out var from) ? from.ToUniversalTime() : null;
+        DateTime? toDate = DateTime.TryParse(toDateValue, out var to) ? to.ToUniversalTime() : null;
+        double? minAmount = double.TryParse(minAmountValue, out var min) ? min : null;
+        double? maxAmount = double.TryParse(maxAmountValue, out var max) ? max : null;
 
         try
         {
-            IQueryable<Payment> payments = db.Payments;
-
-            if (id.Count > 0)
-            {
-                List<string> ids = id.ToString().Split(',').ToList();
-                payments = payments.Where(p => ids.Contains(p.Id.ToString()));
-            }
-
-            if (!String.IsNullOrWhiteSpace(fromDate))
-            {
-                DateTime from = DateTime.Parse(fromDate.ToString()).ToUniversalTime();
-                payments = payments.Where(p => p.CreatedAt >= from);
-            }
-
-            if (!String.IsNullOrWhiteSpace(toDate))
-            {
-                DateTime to = DateTime.Parse(toDate.ToString()).ToUniversalTime();
-                payments = payments.Where(p => p.CreatedAt <= to);
-            }
-
-            if (!String.IsNullOrWhiteSpace(minAmount))
-            {
-                double min = double.Parse(minAmount.ToString());
-                payments = payments.Where(p => p.Amount >= min);
-            }
-
-            if (!String.IsNullOrWhiteSpace(maxAmount))
-            {
-                double max = double.Parse(maxAmount.ToString());
-                payments = payments.Where(p => p.Amount <= max);
-            }
-
-            return TypedResults.Ok(
-                await payments
-                    .Include(p => p.Beneficiary.Address)
-                    .Include(p => p.Beneficiary.Account)
-                    .Include(p => p.Originator.Address)
-                    .Include(p => p.Originator.Account)
-                    .ToListAsync()
-            );
+            List<Payment> payments = await paymentRepository.GetPaymentsAsync(ids, fromDate, toDate, minAmount, maxAmount);
+            return TypedResults.Ok(payments);
         }
         catch (Exception e)
         {
@@ -257,4 +227,5 @@ public static class PaymentEndpoints
             return TypedResults.BadRequest("Something went wrong with getting payments");
         }
     }
+
 }
