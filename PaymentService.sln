@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		docker-compose.yml = docker-compose.yml
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentService.Tests", "PaymentService.Tests\PaymentService.Tests.csproj", "{8F216162-C821-4170-A6B6-671CFBBC068D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,5 +19,9 @@ Global
 		{0D5C8668-8373-4DBE-A4D2-A722DEC3C4BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D5C8668-8373-4DBE-A4D2-A722DEC3C4BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D5C8668-8373-4DBE-A4D2-A722DEC3C4BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F216162-C821-4170-A6B6-671CFBBC068D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F216162-C821-4170-A6B6-671CFBBC068D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F216162-C821-4170-A6B6-671CFBBC068D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F216162-C821-4170-A6B6-671CFBBC068D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

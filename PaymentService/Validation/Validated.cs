@@ -8,7 +8,7 @@ public class Validated<T>
 {
     private ValidationResult Validation { get; }
 
-    private Validated(T value, ValidationResult validation)
+    public Validated(T value, ValidationResult validation)
     {
         Value = value;
         Validation = validation;

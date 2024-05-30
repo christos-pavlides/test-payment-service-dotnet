@@ -12,7 +12,10 @@ public static class PaymentEndpoints
 {
     public static void RegisterPaymentEndpoints(this WebApplication app)
     {
-        app.MapPost("/payment", CreatePayment).Accepts<Payment>("application/json").WithOpenApi();
+        app.MapPost("/payment", CreatePayment)
+            .Accepts<Payment>("application/json")
+            .WithOpenApi();
+
         app.MapGet("/payment", GetPayments).WithName("GetPayments").WithOpenApi(generatedOperation =>
         {
             var idParameter = new OpenApiParameter
@@ -25,13 +28,14 @@ public static class PaymentEndpoints
                 Schema = new OpenApiSchema { Type = "string", Format = "number" }
             };
             generatedOperation.Parameters.Add(idParameter);
-            
+
             var fromDateParameter = new OpenApiParameter
             {
                 Name = "from",
                 In = ParameterLocation.Query,
                 Description = "Filter payments from the specified date (inclusive).",
                 Required = false,
+                Example = new OpenApiString("2024-05-27"),
                 Schema = new OpenApiSchema { Type = "string", Format = "date" }
             };
             generatedOperation.Parameters.Add(fromDateParameter);
@@ -42,6 +46,7 @@ public static class PaymentEndpoints
                 In = ParameterLocation.Query,
                 Description = "Filter payments up to the specified date (inclusive).",
                 Required = false,
+                Example = new OpenApiString("2024-05-27"),
                 Schema = new OpenApiSchema { Type = "string", Format = "date" }
             };
             generatedOperation.Parameters.Add(toDateParameter);
@@ -52,6 +57,7 @@ public static class PaymentEndpoints
                 In = ParameterLocation.Query,
                 Description = "Filter payments with a minimum amount.",
                 Required = false,
+                Example = new OpenApiString("360.50"),
                 Schema = new OpenApiSchema { Type = "number", Format = "decimal" }
             };
             generatedOperation.Parameters.Add(minAmountParameter);
@@ -62,12 +68,13 @@ public static class PaymentEndpoints
                 In = ParameterLocation.Query,
                 Description = "Filter payments with a maximum amount.",
                 Required = false,
+                Example = new OpenApiString("360.50"),
                 Schema = new OpenApiSchema { Type = "number", Format = "decimal" }
             };
             generatedOperation.Parameters.Add(maxAmountParameter);
 
             return generatedOperation;
-        });
+        }).Produces<List<Payment>>(StatusCodes.Status200OK).Produces(StatusCodes.Status404NotFound);
         app.MapGet("/payment/{id}", GetPaymentById).WithName("GetPaymentById").WithOpenApi(generatedOperation =>
             {
                 var parameter = generatedOperation.Parameters.FirstOrDefault(p => p.Name == "id");
@@ -77,10 +84,11 @@ public static class PaymentEndpoints
 
                 return generatedOperation;
             }).Produces<Payment>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status500InternalServerError);
     }
 
-    static async Task<IResult> GetPaymentById(int id, ApiDbContext db)
+    public static async Task<IResult> GetPaymentById(int id, ApiDbContext db)
     {
         return await db.Payments.FindAsync(id)
             is Payment payment
@@ -88,15 +96,15 @@ public static class PaymentEndpoints
             : (IResult)TypedResults.NotFound();
     }
 
-    static async Task<IResult> CreatePayment(Validated<Payment> req, ApiDbContext db)
+    public static async Task<IResult> CreatePayment(Validated<Payment> req, ApiDbContext db)
     {
-        //add protection regarding duplicate requests
-        //throttling?
         var (isValid, value) = req;
 
         if (!isValid) return TypedResults.BadRequest(req.Errors);
 
-        var transaction = db.Database.BeginTransaction();
+        using var transaction = db.Database.ProviderName != "Microsoft.EntityFrameworkCore.InMemory" 
+            ? db.Database.BeginTransaction() 
+            : null;
 
         try
         {
@@ -181,17 +189,18 @@ public static class PaymentEndpoints
             db.Add(value);
             await db.SaveChangesAsync();
 
-            transaction.Commit();
+            transaction?.Commit();
             return TypedResults.Created($"/payment/{value.Id}", value);
         }
         catch (Exception e)
         {
             Log.Fatal(e, "Application terminated unexpectedly");
+            transaction?.Rollback();
             return TypedResults.BadRequest("Something went wrong with storing payment");
         }
     }
 
-    static async Task<IResult> GetPayments(HttpRequest request, ApiDbContext db)
+    public static async Task<IResult> GetPayments(HttpRequest request, ApiDbContext db)
     {
         StringValues id = request.Query["id"];
         StringValues fromDate = request.Query["from"];
@@ -211,13 +220,13 @@ public static class PaymentEndpoints
 
             if (!String.IsNullOrWhiteSpace(fromDate))
             {
-                DateTime from = DateTime.Parse(fromDate.ToString());
+                DateTime from = DateTime.Parse(fromDate.ToString()).ToUniversalTime();
                 payments = payments.Where(p => p.CreatedAt >= from);
             }
 
             if (!String.IsNullOrWhiteSpace(toDate))
             {
-                DateTime to = DateTime.Parse(fromDate.ToString());
+                DateTime to = DateTime.Parse(toDate.ToString()).ToUniversalTime();
                 payments = payments.Where(p => p.CreatedAt <= to);
             }
 
