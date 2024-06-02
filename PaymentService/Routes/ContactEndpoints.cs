@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Contracts;
 using PaymentService.Data;
@@ -11,23 +9,28 @@ public static class ContactEndpoints
 {
     public static void RegisterContactEndpoints(this WebApplication app)
     {
-        app.MapPost("/contact", CreateContact);
-        app.MapGet("/contact", GetContacts);
+        //CP Endpoints must define the accept/produces
+        app.MapPost("/contact", CreateContact)
+            .WithOpenApi()
+            .Accepts<Contact>("application/json");
+        app.MapGet("/contact", GetContacts)
+            .WithOpenApi();
 
     }
-    
+
     static async Task<IResult> CreateContact(Validated<Contact> req, IContactRepository contactRepo, ApiDbContext db)
     {
         var (isValid, value) = req;
 
         if (!isValid)
         {
-            return TypedResults.BadRequest(new ProblemDetails {Title = "Validation Failed"});
+            //CP: Add the errors to the response
+            return TypedResults.ValidationProblem(req.Errors);
         }
 
         await contactRepo.AddContactAsync(value);
         await db.SaveChangesAsync();
-        
+
         return TypedResults.Created($"/contact/{value.Id}", value);
     }
 
